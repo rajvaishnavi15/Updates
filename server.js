@@ -12,7 +12,11 @@ const app = express();
 connectDB();
 
 // Middleware
-app.use(cors()); // add origin url if needed
+app.use(
+  cors({
+    origin: "http://localhost:5173",
+  })
+); // add origin url if needed
 app.use(express.json());
 app.use(cookieParser());
 app.use(
@@ -25,7 +29,7 @@ app.use(
 );
 
 // Routes
-app.use("/api/auth", authRoutes);
+app.use("/api/v1/auth", authRoutes);
 
 // Start server
 const PORT = process.env.PORT || 5000;

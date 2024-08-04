@@ -1,58 +1,75 @@
 const User = require("../models/userModel");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-const sendRegistrationEmail = require("../utils/sendEmail");
-const JWT_SECRET = process.env.JWT_SECRET;
+const nodemailer = require("nodemailer");
 
 exports.register = async (req, res) => {
   try {
-    const {
-      username,
-      email,
-      password,
-      phoneNumber,
-      role,
-      userType,
-      firstSchool,
-    } = req.body;
+    console.log(req.body);
+    const { username, email, password, phone, role, userType, answer } =
+      req.body;
 
     // Check if user already exists
-    let user = await User.findOne({ email });
+    let isUserExist = await User.findOne({ email });
 
-    if (user) {
-      return res.status(400).json({ msg: "User already exists" });
+    if (isUserExist) {
+      console.log("userExist");
+      return res.status(400).json("User already exists");
     }
 
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
     // Create a new user
-    user = new User({
+    const user = new User({
       username,
       email,
-      password,
-      phoneNumber,
+      password: hashedPassword,
+      phoneNumber: phone,
       role,
       userType,
-      firstSchool,
+      firstSchool: answer,
     });
-
-    const salt = await bcrypt.genSalt(10);
-    user.password = await bcrypt.hash(password, salt);
 
     await user.save();
 
+    function sendRegistrationEmail(email) {
+      try {
+        const transporter = nodemailer.createTransport({
+          service: "Gmail",
+          auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASS,
+          },
+          secure: false,
+        });
+        const mailOptions = {
+          from: "toletglobetech@gmail.com",
+          to: email,
+          subject: "Registration Successful",
+          text: "Thank you for registering with us!",
+      //     html: `
+      //     <p>Thank you for registering with us!</p>
+      // `,
+        };
+
+        transporter.sendMail(mailOptions, (error, info) => {
+          if (error) {
+            console.log("Error sending mail: ", error);
+          } else {
+            console.log("Email sent: " + info.response);
+          }
+        });
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    res.status(200).json("Registration success");
     sendRegistrationEmail(email);
-
-    // const payload = { user: { id: user.id } };
-    // jwt.sign(payload, JWT_SECRET, { expiresIn: "3d" }, (err, token) => {
-    //   if (err) throw err; // Handle JWT signing error
-    //   res.json({
-    //     msg: "Registration successful. Please check your email for confirmation.",
-    //   });
-    // });
-
-    // uncomment if jwt requires when register
   } catch (err) {
     console.error(err.message);
-    res.status(500).send("Internal server error");
+    res.status(500).json("Internal server error");
   }
 };
 
@@ -64,28 +81,33 @@ exports.login = async (req, res) => {
     let user = await User.findOne({ email });
 
     if (!user) {
-      return res.status(400).json({ msg: "Invalid credentials" });
+      return res.status(400).json("No user is registered with this email");
     }
 
     // compare passwords
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(400).json({ msg: "Invalid credentials" });
+      return res.status(400).json("Invalid credentials");
     }
 
     // Generate JWT
     const payload = { user: { id: user.id } };
 
-    jwt.sign(payload, JWT_SECRET, { expiresIn: "3d" }, (err, token) => {
-      if (err) {
-        console.error("JWT signing error:", err.message);
-        return res.status(500).json({ msg: "Error signing token" });
+    jwt.sign(
+      payload,
+      process.env.JWT_SECRET,
+      { expiresIn: "3d" },
+      (err, token) => {
+        if (err) {
+          console.error("JWT signing error:", err.message);
+          // return res.status(500).json({ msg: "Error signing token" });
+        }
+        res.json(token);
       }
-      res.json({ token });
-    });
+    );
   } catch (err) {
     console.error(err.message);
-    res.status(500).send("Internal server error");
+    res.status(500).json("Internal server error");
   }
 };
 
